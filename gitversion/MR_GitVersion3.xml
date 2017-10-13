@@ -157,6 +157,7 @@ try {
         $chocoArgs = "-y"
         if ($includePrerelease -eq "true") {
           $chocoArgs = "$chocoArgs --pre"
+          Write-Host "Chocolatey args $chocoArgs"
         }
         
         iex "$choco install gitversion.portable $chocoArgs"
@@ -172,7 +173,8 @@ try {
         
         $chocoArgs = "-y"
         if ($includePrerelease -eq "true") {
-          $chocoArgs = "$chocoArgs --pre"
+            $chocoArgs = "$chocoArgs --pre"
+            Write-Host "Chocolatey args $chocoArgs"
         }
         
         iex "$choco upgrade gitversion.portable $chocoArgs"

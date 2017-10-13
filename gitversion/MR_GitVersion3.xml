@@ -19,9 +19,9 @@
       <param name="mr.GitVersion.projArgs" value="" spec="text description='If an MSBuild file is specified then arguments to pass to MSBuild.' display='normal' label='MSBuild Arguments:'" />
       <param name="mr.GitVersion.updateAssemblyInfo" value="false" spec="checkbox checkedValue='true' description='Update any AssemblyInfo files while running the Executable or MSBuild file?' display='normal' label='Update AssemblyInfo Files:' uncheckedValue='false'" />
       <param name="mr.GitVersion.updateAssemblyInfoFileName" value="" spec="text description='If Update AssemblyInfo Files is specified then name of AssemblyInfo file to update.' display='normal' label='Update AssemblyInfo File Name:'" />
-      <param name="mr.GitVersion.noCache" value="false" spec="checkbox checkedValue='false' description='Bypasses the cache, result will not be written to the cache' display='normal' label='Bypass cache:'" />
+      <param name="mr.GitVersion.noCache" value="false" spec="checkbox checkedValue='true' description='Bypasses the cache, result will not be written to the cache' display='normal' label='Bypass cache:' uncheckedValue='false'" />
       <param name="mr.GitVersion.updateGitVersion" value="false" spec="checkbox checkedValue='true' description='Use Chocolatey to check whether a new version of GitVersion is available?' display='normal' label='Update GitVersion:' uncheckedValue='false'" />
-      <param name="mr.GitVersion.updateGitVersionIncludePre" value="false" spec="checkbox checkedValue='false' description='Include prerelease versions?' display='normal' label='Include Prerelease:'" />
+      <param name="mr.GitVersion.updateGitVersionIncludePre" value="false" spec="checkbox checkedValue='true' description='Include prerelease versions?' display='normal' label='Include Prerelease:' uncheckedValue='false'" />
     </parameters>
     <build-runners>
       <runner name="GitVersion" type="jetbrains_powershell">
@@ -156,8 +156,7 @@ try {
         
         $chocoArgs = "-y"
         if ($includePrerelease -eq "true") {
-          $chocoArgs = "$chocoArgs --pre"
-          Write-Host "Chocolatey args $chocoArgs"
+            $chocoArgs = "$chocoArgs --pre"
         }
         
         iex "$choco install gitversion.portable $chocoArgs"
@@ -174,7 +173,6 @@ try {
         $chocoArgs = "-y"
         if ($includePrerelease -eq "true") {
             $chocoArgs = "$chocoArgs --pre"
-            Write-Host "Chocolatey args $chocoArgs"
         }
         
         iex "$choco upgrade gitversion.portable $chocoArgs"

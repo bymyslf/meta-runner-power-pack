@@ -4,7 +4,9 @@ Param (
     [string] $output = '%mr.GitVersion.output%',
     [string] $outputFile = '%mr.GitVersion.outputFile%',
     [string] $url = '%mr.GitVersion.url%',
+    [string] $dynamicRepoLocation = '%mr.GitVersion.dynamicRepoLocation%',
     [string] $branch = '%mr.GitVersion.branch%',
+    [string] $commitId = '%mr.GitVersion.commitId%',
     [string] $username = '%mr.GitVersion.username%',
     [string] $password = '%mr.GitVersion.password%',
     [string] $logFile = '%mr.GitVersion.logFile%',
@@ -13,11 +15,12 @@ Param (
     [string] $proj = '%mr.GitVersion.proj%',
     [string] $projArgs = '%mr.GitVersion.projArgs%',
     [string] $updateAssemblyInfo = '%mr.GitVersion.updateAssemblyInfo%',
-    [string] $updateGitVersion = '%mr.GitVersion.updateGitVersion%'
+    [string] $updateAssemblyInfoFileName = '%mr.GitVersion.updateAssemblyInfoFileName%',
+    [string] $noCache = '%mr.GitVersion.noCache%',
+    [string] $updateGitVersion = '%mr.GitVersion.updateGitVersion%',
+    [string] $includePrerelease = '%mr.GitVersion.updateGitVersionIncludePre%'
 )
-
 $ErrorActionPreference = "Stop"
-
 function Join-ToWorkingDirectoryIfSpecified($path) {
     $workingDir = "%teamcity.build.workingDir%"
     if ($workingDir -match "teamcity.build.workingDir") {
@@ -28,28 +31,28 @@ function Join-ToWorkingDirectoryIfSpecified($path) {
     }
     return $path
 }
-
 function Test-IsSpecified ($value) {
     if ($value -ne $null -and $value -ne "" -and -not ($value -match "mr.GitVersion.")) {
         return $true
     }
     return $false
 }
-
 function Append-IfSpecified($appendTo, $command, $value) {
     if (Test-IsSpecified $value) {
         return "$appendTo /$command '$value'"
     }
     return $appendTo
 }
-
 function Build-Arguments() {
     $args = "";
     if (Test-IsSpecified $workingDir) {
+        $workingDir = $workingDir.TrimEnd('\')
         $args = """$workingDir"""
     }
     $args = Append-IfSpecified $args "url" $url
+    $args = Append-IfSpecified $args "dynamicRepoLocation" $dynamicRepoLocation
     $args = Append-IfSpecified $args "b" $branch
+    $args = Append-IfSpecified $args "c" $commitId
     $args = Append-IfSpecified $args "u" $username
     $args = Append-IfSpecified $args "p" $password
     $args = Append-IfSpecified $args "output" $output
@@ -63,16 +66,21 @@ function Build-Arguments() {
         $args = Append-IfSpecified $args "projargs" $projargs
     }
     if ($updateAssemblyInfo -eq "true") {
-        $args = "$args /UpdateAssemblyInfo"
+        if (Test-IsSpecified $updateAssemblyInfoFileName) {
+            $args = "$args /UpdateAssemblyInfo $updateAssemblyInfoFileName"
+        } else {
+            $args = "$args /UpdateAssemblyInfo"
+        }
     }
     if ($output -eq "json" -and (Test-IsSpecified $outputFile)) {
         $args = "$args > ""$outputFile"""
     }
+    if ($noCache -eq "true") {
+        $args = "$args /nocache"
+    }
     return $args
 }
-
 try {
-
     $chocolateyDir = $null
     if ($env:ChocolateyInstall -ne $null) {
         $chocolateyDir = $env:ChocolateyInstall
@@ -81,10 +89,9 @@ try {
     } elseif (Test-Path (Join-Path ([Environment]::GetFolderPath("CommonApplicationData")) Chocolatey)) {
         $chocolateyDir = Join-Path ([Environment]::GetFolderPath("CommonApplicationData")) Chocolatey
     }
-    
     if ($chocolateyDir -eq $null) {
         Write-Host "##teamcity[progressMessage 'Chocolatey not installed; installing Chocolatey']"
-        iex ((new-object net.webclient).DownloadString('https://chocolatey.org/install.ps1'))
+        & { iex ((new-object net.webclient).DownloadString('https://chocolatey.org/install.ps1')) }
         $chocolateyDir = Join-Path ([Environment]::GetFolderPath("CommonApplicationData")) Chocolatey
         if (-not (Test-Path $chocolateyDir)) {
             throw "Error installing Chocolatey"
@@ -92,42 +99,53 @@ try {
     } else {
         Write-Host "Chocolatey already installed"
     }
-
     $chocolateyBinDir = Join-Path $chocolateyDir "bin"
     $gitversion = Join-Path $chocolateyBinDir "gitversion.bat"
     if (-not (Test-Path $gitversion)) {
         $gitversion = Join-Path $chocolateyBinDir "gitversion.exe"
     }
-	
-    $choco = Join-Path (Join-Path $chocolateyDir "chocolateyInstall") "chocolatey.cmd"
-	
+    $choco = Join-Path $chocolateyDir "choco.exe"
     if (-not (Test-Path $gitversion)) {
         Write-Host "##teamcity[progressMessage 'GitVersion not installed; installing GitVersion']"
-        iex "$choco install gitversion.portable"
+        
+        $chocoArgs = "-y"
+        if ($includePrerelease -eq "true") {
+          $chocoArgs = "$chocoArgs --pre"
+          Write-Host "Chocolatey args $chocoArgs"
+        }
+        
+        iex "$choco install gitversion.portable $chocoArgs"
         if ($LASTEXITCODE -ne 0) {
             throw "Error installing GitVersion"
         }
     } else {
         Write-Host "GitVersion already installed"
     }
-
     if ($updateGitVersion -eq "true") {
         Write-Host "##teamcity[progressMessage 'Checking for updated version of GitVersion']"
-        iex "$choco update gitversion.portable"
+        
+        $chocoArgs = "-y"
+        if ($includePrerelease -eq "true") {
+            $chocoArgs = "$chocoArgs --pre"
+            Write-Host "Chocolatey args $chocoArgs"
+        }
+        
+        iex "$choco upgrade gitversion.portable $chocoArgs"
         if ($LASTEXITCODE -ne 0) {
             throw "Error updating GitVersion"
         }
     } else {
         Write-Host "GitVersion will not be updated"
-    }	
-
+    }
     $outputFile = Join-ToWorkingDirectoryIfSpecified $outputFile
     $logFile = Join-ToWorkingDirectoryIfSpecified $logFile
     $exec = Join-ToWorkingDirectoryIfSpecified $exec
     $proj = Join-ToWorkingDirectoryIfSpecified $proj
-
     $arguments = Build-Arguments
-    $safeArgs = $arguments.Replace($password, "*****").Replace("'", """")
+    $safeArgs = $arguments.Replace("'", """")
+    if($password) {
+      $safeArgs = $arguments.Replace($password, "*****")
+    }
     Write-Host "##teamcity[progressMessage 'Running: $gitversion $safeArgs']"
     iex "$gitversion $arguments"
     if ($LASTEXITCODE -ne 0) {
